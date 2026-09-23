@@ -3,17 +3,17 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --hostname 127.0.0.1",
-    "build": "prisma generate && next build",
-    "start": "next start --hostname 127.0.0.1",
-    "db:setup": "node scripts/setup.mjs && prisma generate && prisma migrate deploy && tsx prisma/seed.ts",
-    "db:seed": "tsx prisma/seed.ts",
+    "dev": "node scripts/app.mjs dev",
+    "build": "prisma generate && node scripts/app.mjs build",
+    "start": "node scripts/app.mjs start",
+    "db:setup": "node scripts/setup.mjs && prisma generate && prisma migrate deploy && tsx data/prisma/seed.ts",
+    "db:seed": "tsx data/prisma/seed.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "check": "npm run typecheck && npm test",
-    "test:http": "node scripts/smoke.mjs",
-    "format": "prettier --write \"app/**/*.{ts,tsx,css}\" \"components/**/*.{ts,tsx}\" \"lib/**/*.ts\" \"tests/**/*.ts\" \"scripts/*.mjs\" \"prisma/*.ts\" \"*.{json,ts,mjs,md}\" \".github/**/*.yml\"",
-    "lint": "eslint app components lib tests scripts prisma/seed.ts"
+    "test:http": "node tests/api/smoke.mjs",
+    "format": "prettier --write \"apps/**/*.{ts,tsx,css,mjs,json}\" \"packages/**/*.ts\" \"data/**/*.ts\" \"tests/**/*.{ts,mjs}\" \"scripts/*.mjs\" \"*.{json,ts,mts,mjs,md}\" \"docs/**/*.md\" \".github/**/*.yml\"",
+    "lint": "eslint apps packages data tests scripts --max-warnings=0"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.8",
@@ -47,5 +47,13 @@
     "tsx": "^4.20.5",
     "typescript": "^5.9.2",
     "vitest": "^4.1.11"
+  },
+  "workspaces": [
+    "apps/frontend",
+    "apps/backend",
+    "packages/*"
+  ],
+  "prisma": {
+    "schema": "data/prisma/schema.prisma"
   }
 }

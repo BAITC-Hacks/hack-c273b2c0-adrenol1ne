@@ -1,0 +1,255 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+model Employee {
+  id           String @id
+  employeeId   String @unique
+  name         String
+  role         String
+  grade        String
+  department   String @default("Engineering")
+  tenureMonths Int
+  targetRole   String
+  targetGrade  String
+  skills       EmployeeSkill[]
+  history      ActivityHistory[]
+  recommendations Recommendation[]
+  learningEnrollments LearningEnrollment[]
+  learningEvidence SkillEvidence[]
+}
+model Skill {
+  id        String @id
+  skillCode String @unique
+  name      String
+  category  String
+  employees EmployeeSkill[]
+  requirements GradeRequirement[]
+  gains     EventSkillGain[]
+  missions  MissionSkill[]
+  learningPaths LearningPath[]
+  learningEvidence SkillEvidence[]
+}
+model EmployeeSkill {
+  employeeId String
+  skillId    String
+  level      Int
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  skill      Skill @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  @@id([employeeId, skillId])
+}
+model GradeRequirement {
+  id            String @id @default(cuid())
+  role          String
+  grade         String
+  skillId       String
+  requiredLevel Int
+  weight        Float
+  skill         Skill @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  @@unique([role, grade, skillId])
+}
+model Event {
+  id               String @id
+  eventCode        String @unique
+  name             String
+  type             String
+  category         String
+  description      String
+  hours            Int
+  businessPriority Float
+  minTenureMonths  Int @default(0)
+  gains            EventSkillGain[]
+  history          ActivityHistory[]
+  recommendations  Recommendation[]
+  learningPath LearningPath?
+}
+model EventSkillGain {
+  eventId  String
+  skillId  String
+  gain     Int
+  maxLevel Int
+  event    Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  skill    Skill @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  @@id([eventId, skillId])
+}
+model ActivityHistory {
+  id          String @id @default(cuid())
+  employeeId  String
+  eventId     String
+  status      String
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  event       Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  @@unique([employeeId, eventId])
+}
+model Recommendation {
+  id          String @id @default(cuid())
+  employeeId  String
+  eventId     String
+  score       Float
+  explanation String
+  fingerprint String
+  createdAt   DateTime @default(now())
+  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  event       Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  @@unique([employeeId, eventId])
+}
+model Mission {
+  id          String @id
+  eventId     String @unique
+  name        String
+  description String
+  duration    Int
+  commitment  Int
+  skills      MissionSkill[]
+}
+model MissionSkill {
+  missionId     String
+  skillId       String
+  requiredLevel Int
+  mission       Mission @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  skill         Skill @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  @@id([missionId, skillId])
+}
+
+model LearningPath {
+  id String @id @default(cuid())
+  eventId String @unique
+  title String
+  description String
+  skillId String
+  fromLevel Int
+  toLevel Int
+  audience String
+  learningObjectives String
+  masteryThreshold Int @default(70)
+  requiresApproval Boolean @default(false)
+  createdAt DateTime @default(now())
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  skill Skill @relation(fields: [skillId], references: [id])
+  units LearningUnit[]
+  enrollments LearningEnrollment[]
+}
+model LearningUnit {
+  id String @id
+  pathId String
+  enrollmentId String?
+  title String
+  description String
+  type String
+  estimatedMinutes Int
+  order Float
+  required Boolean @default(true)
+  skillId String
+  difficulty Int
+  content String
+  learningObjectives String
+  completionRequirement String?
+  masteryPoints Int @default(0)
+  assessmentConfig String?
+  isRemediation Boolean @default(false)
+  path LearningPath @relation(fields: [pathId], references: [id], onDelete: Cascade)
+  enrollment LearningEnrollment? @relation("RemediationUnits", fields: [enrollmentId], references: [id], onDelete: Cascade)
+  progress LearningUnitProgress[]
+  assessments AssessmentResult[]
+  evidence SkillEvidence[]
+  @@index([pathId, order])
+}
+model LearningEnrollment {
+  id String @id @default(cuid())
+  employeeId String
+  pathId String
+  status String @default("IN_PROGRESS")
+  startedAt DateTime @default(now())
+  completedAt DateTime?
+  verifiedAt DateTime?
+  approvalStatus String @default("NOT_REQUIRED")
+  approvalComment String?
+  approvedAt DateTime?
+  readinessBefore Int
+  configuredGains String @default("[]")
+  startingSkills String
+  milestone String?
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  path LearningPath @relation(fields: [pathId], references: [id], onDelete: Cascade)
+  units LearningUnit[] @relation("RemediationUnits")
+  progress LearningUnitProgress[]
+  assessments AssessmentResult[]
+  evidence SkillEvidence[]
+  @@unique([employeeId,pathId])
+}
+model LearningUnitProgress {
+  id String @id @default(cuid())
+  enrollmentId String
+  unitId String
+  status String @default("IN_PROGRESS")
+  submission String?
+  answers String?
+  score Float?
+  feedback String?
+  attempts Int @default(0)
+  skipped Boolean @default(false)
+  startedAt DateTime @default(now())
+  completedAt DateTime?
+  enrollment LearningEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  unit LearningUnit @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  @@unique([enrollmentId,unitId])
+}
+model AssessmentResult {
+  id String @id @default(cuid())
+  enrollmentId String
+  unitId String
+  score Float
+  passed Boolean
+  evaluation String
+  submission String?
+  answers String?
+  createdAt DateTime @default(now())
+  enrollment LearningEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  unit LearningUnit @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  @@index([enrollmentId,createdAt])
+}
+model SkillEvidence {
+  id String @id @default(cuid())
+  employeeId String
+  enrollmentId String
+  unitId String?
+  skillId String
+  type String
+  title String
+  level Int
+  score Float?
+  confidence Int
+  summary String
+  verifiedAt DateTime?
+  createdAt DateTime @default(now())
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  enrollment LearningEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  unit LearningUnit? @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  skill Skill @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  @@unique([enrollmentId,unitId,skillId])
+  @@index([employeeId,skillId])
+}
+
+model ManagerTeam {
+ managerId String
+ department String
+ @@id([managerId, department])
+}
+
+model AuditEvent {
+ id String @id @default(cuid())
+ actorId String
+ actorRole String
+ action String
+ entityType String
+ entityId String
+ timestamp DateTime @default(now())
+ metadata String
+ @@index([entityType, entityId, timestamp])
+ @@index([actorId, timestamp])
+}

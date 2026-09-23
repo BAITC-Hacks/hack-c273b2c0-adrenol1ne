@@ -22,8 +22,8 @@ if (source.includes("replace-this-with-a-long-random-session-secret"))
       randomBytes(32).toString("hex"),
     ),
   );
-mkdirSync(new URL("../prisma", import.meta.url), { recursive: true });
-const database = new URL("../prisma/dev.db", import.meta.url);
+mkdirSync(new URL("../data/prisma", import.meta.url), { recursive: true });
+const database = new URL("../data/prisma/dev.db", import.meta.url);
 if (!existsSync(database)) closeSync(openSync(database, "a"));
 console.log(
   "Local environment and SQLite file ready. Existing data preserved.",

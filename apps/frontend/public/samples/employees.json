@@ -1,0 +1,39 @@
+[
+  {
+    "id": "EVAL_NEW_101",
+    "employeeId": "EVAL-101",
+    "name": "Samira Alimova",
+    "role": "Backend Engineer",
+    "grade": "Middle",
+    "department": "Digital Banking",
+    "tenureMonths": 38,
+    "targetRole": "Backend Engineer",
+    "targetGrade": "Senior",
+    "skills": [
+      {
+        "skillId": "SK_PYTHON",
+        "level": 4
+      },
+      {
+        "skillId": "SK_SYSTEM_DESIGN",
+        "level": 2
+      },
+      {
+        "skillId": "SK_DATABASES",
+        "level": 4
+      },
+      {
+        "skillId": "SK_LEADERSHIP",
+        "level": 2
+      },
+      {
+        "skillId": "SK_CLOUD",
+        "level": 2
+      },
+      {
+        "skillId": "SK_PUBLIC_SPEAKING",
+        "level": 1
+      }
+    ]
+  }
+]
