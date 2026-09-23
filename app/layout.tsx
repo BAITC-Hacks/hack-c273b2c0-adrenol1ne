@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import "@fontsource-variable/inter";
 import "@fontsource-variable/manrope";
 import "./globals.css";
+import "./learning.css";
+import "./catalog.css";
 export const metadata: Metadata = {
   title: "Halyk TalentOS · Career Quest",
   description:

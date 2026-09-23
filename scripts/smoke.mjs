@@ -65,6 +65,7 @@ for (const path of [
   "/employee/skills",
   "/employee/career",
   "/employee/activities",
+  "/employee/activities/EV017",
   "/employee/profile",
   "/missions",
 ]) {
@@ -74,7 +75,70 @@ for (const path of [
     path,
   );
 }
+const learning = await request("/api/learning/EV017", {
+  headers: { Cookie: employee },
+});
+assert.equal(learning.status, 200);
+const workspace = await learning.json();
+assert.equal(workspace.activity.id, "EV017");
+assert.equal(workspace.employee.id, state.employee.id);
+assert(workspace.units.length >= 7);
+for (const unit of workspace.units) {
+  assert(!("assessmentConfig" in unit));
+  for (const question of unit.content.questions ?? [])
+    assert(!("correctAnswer" in question));
+}
+const directCompletion = await request("/api/activity", {
+  method: "POST",
+  headers: {
+    Cookie: employee,
+    Origin: origin,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({ eventId: "EV017", status: "COMPLETED" }),
+});
+assert.equal(
+  directCompletion.status,
+  400,
+  "Legacy completion must not bypass mastery",
+);
+const fabricatedScore = await request("/api/learning/EV017/unit", {
+  method: "POST",
+  headers: {
+    Cookie: employee,
+    Origin: origin,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    unitId: workspace.units[0].id,
+    action: "complete",
+    score: 100,
+    employeeId: "EMP002",
+  }),
+});
+assert.equal(
+  fabricatedScore.status,
+  400,
+  "Client-provided scores and identities must be rejected",
+);
+assert.equal(
+  (await request("/api/hr/development", { headers: { Cookie: employee } }))
+    .status,
+  403,
+);
+assert.equal(
+  (await request("/api/evidence", { headers: { Cookie: employee } })).status,
+  200,
+);
 const hr = await login("HR");
+assert.equal(
+  (await request("/api/learning/EV017", { headers: { Cookie: hr } })).status,
+  403,
+);
+assert.equal(
+  (await request("/api/hr/development", { headers: { Cookie: hr } })).status,
+  200,
+);
 const workforce = await request("/api/hr", { headers: { Cookie: hr } });
 assert.equal(workforce.status, 200);
 assert((await workforce.json()).employees.length >= 20);
@@ -83,6 +147,7 @@ for (const path of [
   "/hr/skills",
   "/hr/employees",
   "/hr/activities",
+  "/hr/development",
   "/hr/scenarios",
   "/hr/import",
   "/hr/employees/EMP001/skills",

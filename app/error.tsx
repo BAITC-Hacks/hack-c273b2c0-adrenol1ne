@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 export default function ErrorPage({ reset }: { reset: () => void }) {
   return (
     <main className="page-loading">
@@ -9,7 +10,7 @@ export default function ErrorPage({ reset }: { reset: () => void }) {
       <button className="btn btn-primary" onClick={reset}>
         Reload workspace
       </button>
-      <a href="/">Return to sign in</a>
+      <Link href="/">Return to sign in</Link>
     </main>
   );
 }

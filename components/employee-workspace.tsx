@@ -1,7 +1,10 @@
 "use client";
 import { useState, useRef } from "react";
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { useRouter } from "next/navigation";
+import { ActivityCatalog, type LearningCatalogEntry } from "./activity-catalog";
+import { SkillEvidencePanel } from "./skill-evidence";
+import type { SkillEvidenceView } from "@/lib/learning-types";
 import {
   Radar,
   RadarChart,
@@ -23,7 +26,6 @@ import {
   BookOpen,
   Layers3,
   CheckCircle2,
-  Search,
   Rocket,
   Network,
   TrendingUp,
@@ -71,28 +73,28 @@ export function EmployeeWorkspace({
   initial,
   section,
   hrView = false,
+  initialEvidence = [],
+  learningCatalog = [],
 }: {
   initial: Snapshot;
   section: string;
   hrView?: boolean;
+  initialEvidence?: SkillEvidenceView[];
+  learningCatalog?: LearningCatalogEntry[];
 }) {
   const [state, setState] = useState(initial),
     [selected, setSelected] = useState<Candidate | null>(null),
     [explanation, setExplanation] = useState<Explanation | null>(null),
     [explaining, setExplaining] = useState(false),
+    [explanationTarget, setExplanationTarget] = useState(""),
     [whyNot, setWhyNot] = useState(false),
     [skillDetail, setSkillDetail] = useState<Skill | null>(null),
     [busy, setBusy] = useState(""),
     [error, setError] = useState(""),
     [toast, setToast] = useState(""),
-    [completed, setCompleted] = useState<{
-      before: number;
-      after: number;
-      changes: { skillId: string; from: number; to: number }[];
-    } | null>(null),
-    [filter, setFilter] = useState("Recommended"),
-    [search, setSearch] = useState(""),
+    [skillTab, setSkillTab] = useState("overview"),
     [requirementsOpen, setRequirementsOpen] = useState(false);
+  const router = useRouter();
   const explanationVersion = useRef(0);
   const employeeBase = hrView
     ? `/hr/employees/${state.employee.id}`
@@ -112,11 +114,25 @@ export function EmployeeWorkspace({
   );
   const skillName = (id: string) =>
     state.skills.find((s) => s.id === id)?.name ?? id;
-  async function explain(candidate: Candidate) {
+  async function explain(
+    candidate: Candidate,
+    previewTarget?: { role: string; grade: string },
+  ) {
     const version = ++explanationVersion.current;
     setSelected(candidate);
+    setExplanationTarget(
+      previewTarget ? previewTarget.grade + " " + previewTarget.role : target,
+    );
     setExplanation(candidate.explanation);
     setWhyNot(false);
+    if (
+      previewTarget &&
+      (previewTarget.role !== employee.targetRole ||
+        previewTarget.grade !== employee.targetGrade)
+    ) {
+      setExplaining(false);
+      return;
+    }
     setExplaining(true);
     try {
       const r = await fetch(
@@ -132,7 +148,31 @@ export function EmployeeWorkspace({
       if (version === explanationVersion.current) setExplaining(false);
     }
   }
-  async function activityAction(eventId: string, status: History["status"]) {
+  async function startActivity(eventId: string) {
+    if (hrView) return;
+    setBusy(eventId);
+    setError("");
+    try {
+      const response = await fetch("/api/learning/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ activityId: eventId }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error);
+      router.push("/employee/activities/" + encodeURIComponent(eventId));
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : "Could not open learning journey",
+      );
+    } finally {
+      setBusy("");
+    }
+  }
+  async function activityAction(
+    eventId: string,
+    status: Exclude<History["status"], "COMPLETED" | "IN_PROGRESS">,
+  ) {
     if (hrView) return;
     setBusy(eventId);
     setError("");
@@ -145,21 +185,10 @@ export function EmployeeWorkspace({
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
       setState(data.state);
-      if (status === "COMPLETED") {
-        setSelected(null);
-        setCompleted({
-          before: ready,
-          after: readiness(data.state.employee, data.state.requirements),
-          changes: data.changes,
-        });
-      } else {
-        setSelected(null);
-        setToast(
-          status === "IN_PROGRESS"
-            ? "Activity started. Find it under In progress."
-            : "Preference saved. Your recommendations have been recalculated.",
-        );
-      }
+      setSelected(null);
+      setToast(
+        "Preference saved. Your recommendations have been recalculated.",
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not update activity");
     } finally {
@@ -448,9 +477,7 @@ export function EmployeeWorkspace({
                     <Button
                       variant="outline"
                       disabled={!!busy || hrView}
-                      onClick={() =>
-                        activityAction(best.activity.id, "IN_PROGRESS")
-                      }
+                      onClick={() => startActivity(best.activity.id)}
                     >
                       {busy === best.activity.id
                         ? "Starting…"
@@ -459,7 +486,7 @@ export function EmployeeWorkspace({
                                 h.eventId === best.activity.id &&
                                 h.status === "IN_PROGRESS",
                             )
-                          ? "In progress"
+                          ? "Continue activity"
                           : "Start activity"}
                     </Button>
                   </div>
@@ -735,164 +762,107 @@ export function EmployeeWorkspace({
             title="Your skills. Your foundation."
             description="See your strengths, close meaningful gaps, and trace the evidence behind every skill."
           />
-          <div className="skills-summary">
-            <section className="card">
-              <SectionHeading
-                title="Your target at a glance"
-                description={target}
-              />
-              <div className="radar-chart">
-                <ResponsiveContainer width="100%" height={270}>
-                  <RadarChart
-                    data={req.map((r) => ({
-                      name: skillName(r.skillId),
-                      current:
-                        employee.skills.find((s) => s.skillId === r.skillId)
-                          ?.level ?? 0,
-                      target: r.requiredLevel,
-                    }))}
-                  >
-                    <PolarGrid stroke="#e2e9e5" />
-                    <PolarAngleAxis
-                      dataKey="name"
-                      tick={{ fontSize: 12, fill: "#60716a" }}
-                    />
-                    <Radar
-                      name="Target"
-                      dataKey="target"
-                      stroke="#a8b6ad"
-                      fill="#dce5df"
-                      fillOpacity={0.25}
-                    />
-                    <Radar
-                      name="Current"
-                      dataKey="current"
-                      stroke="#009857"
-                      fill="#00a651"
-                      fillOpacity={0.22}
-                    />
-                  </RadarChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="chart-legend">
-                <span>
-                  <i />
-                  Current skills
-                </span>
-                <span>
-                  <i className="gray" />
-                  Target requirements
-                </span>
-              </div>
-            </section>
-            <section className="card skill-summary-card">
-              <span className="eyebrow">CLOSER THAN YOU THINK</span>
-              <ReadinessRing value={ready} />
-              <h2>
-                {req.length - gaps.length} of {req.length} requirements met
-              </h2>
-              <p>
-                {gaps.length} competencies offer your biggest opportunity for
-                growth. Select any skill to explore its evidence.
-              </p>
-            </section>
+          <div
+            className="tabs skills-view-tabs"
+            role="tablist"
+            aria-label="Skills view"
+          >
+            {["overview", "evidence"].map((tab) => (
+              <button
+                key={tab}
+                role="tab"
+                aria-selected={skillTab === tab}
+                className={skillTab === tab ? "active" : ""}
+                onClick={() => setSkillTab(tab)}
+              >
+                {tab === "overview" ? "Skills overview" : "Evidence"}
+              </button>
+            ))}
           </div>
-          <section className="card">
-            <SectionHeading
-              title="Skill matrix"
-              description="Levels use a 0–5 proficiency scale. Your target defines what matters next."
-            />
-            {matrix()}
-          </section>
+          {skillTab === "overview" ? (
+            <>
+              <div className="skills-summary">
+                <section className="card">
+                  <SectionHeading
+                    title="Your target at a glance"
+                    description={target}
+                  />
+                  <div className="radar-chart">
+                    <ResponsiveContainer width="100%" height={270}>
+                      <RadarChart
+                        data={req.map((r) => ({
+                          name: skillName(r.skillId),
+                          current:
+                            employee.skills.find((s) => s.skillId === r.skillId)
+                              ?.level ?? 0,
+                          target: r.requiredLevel,
+                        }))}
+                      >
+                        <PolarGrid stroke="#e2e9e5" />
+                        <PolarAngleAxis
+                          dataKey="name"
+                          tick={{ fontSize: 12, fill: "#60716a" }}
+                        />
+                        <Radar
+                          name="Target"
+                          dataKey="target"
+                          stroke="#a8b6ad"
+                          fill="#dce5df"
+                          fillOpacity={0.25}
+                        />
+                        <Radar
+                          name="Current"
+                          dataKey="current"
+                          stroke="#009857"
+                          fill="#00a651"
+                          fillOpacity={0.22}
+                        />
+                      </RadarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="chart-legend">
+                    <span>
+                      <i />
+                      Current skills
+                    </span>
+                    <span>
+                      <i className="gray" />
+                      Target requirements
+                    </span>
+                  </div>
+                </section>
+                <section className="card skill-summary-card">
+                  <span className="eyebrow">CLOSER THAN YOU THINK</span>
+                  <ReadinessRing value={ready} />
+                  <h2>
+                    {req.length - gaps.length} of {req.length} requirements met
+                  </h2>
+                  <p>
+                    {gaps.length} competencies offer your biggest opportunity
+                    for growth. Select any skill to explore its evidence.
+                  </p>
+                </section>
+              </div>
+              <section className="card">
+                <SectionHeading
+                  title="Skill matrix"
+                  description="Levels use a 0–5 proficiency scale. Your target defines what matters next."
+                />
+                {matrix()}
+              </section>
+            </>
+          ) : (
+            <SkillEvidencePanel evidence={initialEvidence} hrView={hrView} />
+          )}
         </>
       )}
       {section === "activities" && (
-        <>
-          <Heading
-            eyebrow="LEARNING WITH A DIRECTION"
-            title="Small steps. Measurable progress."
-            description="Every opportunity is a chance to move closer to your career target."
-          />
-          <div className="activity-toolbar">
-            <div className="tabs" role="tablist" aria-label="Activity status">
-              {[
-                "Recommended",
-                "All activities",
-                "In progress",
-                "Completed",
-              ].map((f) => (
-                <button
-                  role="tab"
-                  aria-selected={filter === f}
-                  key={f}
-                  onClick={() => setFilter(f)}
-                  className={filter === f ? "active" : ""}
-                >
-                  {f}
-                </button>
-              ))}
-            </div>
-            <label className="search-box">
-              <Search size={17} />
-              <input
-                aria-label="Search activities"
-                placeholder="Find an activity…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </label>
-          </div>
-          <div className="activity-grid">
-            {(filter === "Recommended"
-              ? state.recommendations.map((c) => c.activity)
-              : state.events.filter(
-                  (e) =>
-                    filter === "All activities" ||
-                    employee.history.some(
-                      (h) =>
-                        h.eventId === e.id &&
-                        h.status ===
-                          (filter === "Completed"
-                            ? "COMPLETED"
-                            : "IN_PROGRESS"),
-                    ),
-                )
-            )
-              .filter((e) =>
-                `${e.name} ${e.category}`
-                  .toLowerCase()
-                  .includes(search.toLowerCase()),
-              )
-              .map((e, i) =>
-                activityCard(e, filter === "Recommended" ? i : undefined),
-              )}
-          </div>
-          {!(
-            filter === "Recommended"
-              ? state.recommendations.map((c) => c.activity)
-              : state.events.filter(
-                  (e) =>
-                    filter === "All activities" ||
-                    employee.history.some(
-                      (h) =>
-                        h.eventId === e.id &&
-                        h.status ===
-                          (filter === "Completed"
-                            ? "COMPLETED"
-                            : "IN_PROGRESS"),
-                    ),
-                )
-          ).some((e) =>
-            `${e.name} ${e.category}`
-              .toLowerCase()
-              .includes(search.toLowerCase()),
-          ) && (
-            <Empty
-              title="A fresh space for your next step"
-              description="No activities match this view. Explore the recommended opportunities or try a different search."
-            />
-          )}
-        </>
+        <ActivityCatalog
+          state={state}
+          metadata={learningCatalog}
+          hrView={hrView}
+          onExplain={explain}
+        />
       )}
       {section === "missions" && (
         <>
@@ -1116,7 +1086,7 @@ export function EmployeeWorkspace({
                   <p>
                     +{selected.after - selected.before} percentage points
                     <br />
-                    toward {target}
+                    toward {explanationTarget}
                   </p>
                 </div>
                 <div>
@@ -1241,69 +1211,18 @@ export function EmployeeWorkspace({
                     </Button>
                     <Button
                       disabled={!!busy || hrView}
-                      onClick={() =>
-                        activityAction(selected.activity.id, "COMPLETED")
-                      }
+                      onClick={() => startActivity(selected.activity.id)}
                     >
                       {busy ? (
                         <LoaderCircle size={16} className="spin" />
                       ) : (
                         <CheckCircle2 size={17} />
                       )}
-                      Mark as completed
+                      Open learning workspace
                     </Button>
                   </>
                 )}
               </div>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
-      <Dialog
-        open={!!completed}
-        onOpenChange={(o) => {
-          if (!o) setCompleted(null);
-        }}
-      >
-        <DialogContent className="completion-dialog">
-          {completed && (
-            <>
-              <motion.div
-                initial={{ scale: 0.7 }}
-                animate={{ scale: 1 }}
-                className="success-icon"
-              >
-                <Check size={32} />
-              </motion.div>
-              <DialogTitle>A step forward. Well earned.</DialogTitle>
-              <DialogDescription>
-                Activity completed. Your career digital twin is up to date.
-              </DialogDescription>
-              <div className="completion-impact">
-                {completed.changes.map((c) => (
-                  <div key={c.skillId}>
-                    <span>{skillName(c.skillId)}</span>
-                    <strong>
-                      {c.from} <ArrowRight size={18} />
-                      <em>{c.to}</em>
-                    </strong>
-                  </div>
-                ))}
-                <div>
-                  <span>Career readiness</span>
-                  <strong>
-                    {completed.before}% <ArrowRight size={18} />
-                    <em>{completed.after}%</em>
-                  </strong>
-                </div>
-              </div>
-              <p>
-                <Sparkles size={16} /> Your next recommendation has been
-                recalculated.
-              </p>
-              <Button className="full-width" onClick={() => setCompleted(null)}>
-                See what’s next <ArrowRight size={16} />
-              </Button>
             </>
           )}
         </DialogContent>
@@ -1333,57 +1252,15 @@ export function EmployeeWorkspace({
                 </strong>
                 <Badge tone="neutral">{skillDetail.category}</Badge>
               </div>
-              {(() => {
-                const evidence = completedHistory.filter((h) =>
-                  state.events
-                    .find((e) => e.id === h.eventId)
-                    ?.gains.some((g) => g.skillId === skillDetail.id),
-                );
-                return (
-                  <>
-                    <div className="confidence">
-                      <span>
-                        Evidence confidence{" "}
-                        <strong>
-                          {Math.min(95, 35 + evidence.length * 15)}%
-                        </strong>
-                      </span>
-                      <Progress
-                        value={Math.min(95, 35 + evidence.length * 15)}
-                      />
-                      <small>
-                        Demo heuristic: 35% baseline + 15% per completed
-                        activity; capped at 95%. Not a validated proficiency
-                        assessment.
-                      </small>
-                    </div>
-                    <h3>Evidence trail</h3>
-                    <div className="evidence-entry">
-                      <CheckCircle2 size={18} />
-                      <div>
-                        <strong>Baseline skill profile</strong>
-                        <p>Starting level from the employee dataset</p>
-                      </div>
-                    </div>
-                    {evidence.map((h) => (
-                      <div className="evidence-entry" key={h.eventId}>
-                        <CheckCircle2 size={18} />
-                        <div>
-                          <strong>
-                            {state.events.find((e) => e.id === h.eventId)?.name}
-                          </strong>
-                          <p>
-                            Completed{" "}
-                            {new Date(h.completedAt!).toLocaleDateString(
-                              "en-GB",
-                            )}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </>
-                );
-              })()}
+              <p className="legacy-evidence-note">
+                Baseline skill levels and historical completions are recorded
+                separately from verified learning evidence.
+              </p>
+              <SkillEvidencePanel
+                evidence={initialEvidence}
+                skillId={skillDetail.id}
+                hrView={hrView}
+              />
             </>
           )}
         </DialogContent>

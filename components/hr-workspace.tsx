@@ -34,7 +34,6 @@ import {
   X,
   LoaderCircle,
   CircleAlert,
-  Check,
   ChevronRight,
 } from "lucide-react";
 import type { Activity, Workforce } from "@/lib/types";

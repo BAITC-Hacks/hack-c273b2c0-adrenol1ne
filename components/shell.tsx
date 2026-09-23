@@ -30,6 +30,7 @@ const employeeNav = [
   { href: "/employee/profile", name: "My profile", icon: UserRound },
 ];
 const hrNav = [
+  { href: "/hr/development", name: "Development", icon: BookOpen },
   { href: "/hr", name: "Overview", icon: LayoutDashboard },
   { href: "/hr/skills", name: "Skill intelligence", icon: ChartNoAxesCombined },
   { href: "/hr/employees", name: "Employees", icon: Users },

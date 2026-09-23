@@ -1,3 +1,15 @@
+import {
+  getActivityWorkspace,
+  startLearningActivity,
+  updateLearningUnit,
+  verifyLearningActivity,
+  getSkillEvidence,
+  getLearningCatalog,
+  developmentReport,
+  reviewLearningApproval,
+  draftLearningPath,
+  saveLearningPath,
+} from "@/lib/learning-service";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { isSameOrigin } from "@/lib/request-security";
@@ -19,6 +31,24 @@ export async function GET(
   const session = await getSession();
   if (!session) return json({ error: "Please sign in." }, 401);
   try {
+    const segments = path.split("/");
+    if (path === "learning-catalog") return json(await getLearningCatalog());
+    if (path === "evidence") {
+      const employeeId =
+        session.role === "EMPLOYEE"
+          ? session.employeeId
+          : request.nextUrl.searchParams.get("employeeId");
+      if (!employeeId) return json({ error: "Employee is required." }, 400);
+      return json(await getSkillEvidence(employeeId));
+    }
+    if (
+      segments.length === 2 &&
+      segments[0] === "learning" &&
+      session.role === "EMPLOYEE"
+    )
+      return json(await getActivityWorkspace(session.employeeId!, segments[1]));
+    if (path === "hr/development" && session.role === "HR")
+      return json(await developmentReport());
     if (path === "me" && session.role === "EMPLOYEE")
       return json(await snapshot(session.employeeId!));
     if (path === "hr" && session.role === "HR") return json(await workforce());
@@ -113,6 +143,73 @@ export async function POST(
     }
     const session = await getSession();
     if (!session) return json({ error: "Please sign in." }, 401);
+
+    const segments = path.split("/");
+    if (path === "learning/start" && session.role === "EMPLOYEE") {
+      const input = z
+        .object({ activityId: z.string().min(1).max(120) })
+        .strict()
+        .parse(await request.json());
+      return json(
+        await startLearningActivity(session.employeeId!, input.activityId),
+      );
+    }
+    if (
+      segments.length === 3 &&
+      segments[0] === "learning" &&
+      session.role === "EMPLOYEE"
+    ) {
+      if (segments[2] === "unit") {
+        const input = z
+          .object({
+            unitId: z.string().min(1).max(180),
+            action: z.enum(["start", "complete", "submit", "skip"]),
+            submission: z.string().max(20000).optional(),
+            answers: z.record(z.number().int().min(0).max(20)).optional(),
+          })
+          .strict()
+          .parse(await request.json());
+        return json(
+          await updateLearningUnit(session.employeeId!, segments[1], input),
+        );
+      }
+      if (segments[2] === "verify") {
+        return json(
+          await verifyLearningActivity(session.employeeId!, segments[1]),
+        );
+      }
+    }
+    if (path === "hr/development/draft" && session.role === "HR") {
+      const input = z
+        .object({
+          skillId: z.string().min(1).max(120),
+          fromLevel: z.number().int().min(0).max(4),
+          toLevel: z.number().int().min(1).max(5),
+          audience: z.string().trim().min(3).max(200),
+          title: z.string().trim().min(3).max(200).optional(),
+        })
+        .strict()
+        .parse(await request.json());
+      return json(await draftLearningPath(input));
+    }
+    if (path === "hr/development/save" && session.role === "HR") {
+      const input = z
+        .object({ draft: z.unknown() })
+        .strict()
+        .parse(await request.json());
+      return json(await saveLearningPath(input.draft));
+    }
+    if (path === "hr/development/approve" && session.role === "HR") {
+      const input = z
+        .object({
+          enrollmentId: z.string().min(1).max(120),
+          approved: z.boolean(),
+          comment: z.string().trim().max(1000).optional(),
+        })
+        .strict()
+        .parse(await request.json());
+      return json(await reviewLearningApproval(input));
+    }
     if (path === "activity" && session.role === "EMPLOYEE") {
       const input = z
         .object({

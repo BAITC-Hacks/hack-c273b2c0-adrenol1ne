@@ -1,11 +1,10 @@
 import { db } from "./db";
 import {
-  applySkillGains,
   rankActivities,
   readiness,
   requirementsFor,
 } from "./recommendation-engine";
-import type { Activity, Employee, History, Snapshot, Workforce } from "./types";
+import type { Employee, History, Snapshot, Workforce } from "./types";
 
 export async function catalog() {
   const [skills, events, requirements, missions] = await Promise.all([
@@ -82,6 +81,10 @@ export async function recordActivity(
   eventId: string,
   status: History["status"],
 ) {
+  if (status === "COMPLETED")
+    throw new Error(
+      "Skill advancement requires Activity Workspace assessments and verification.",
+    );
   return db.$transaction(async (tx) => {
     const raw = await tx.employee.findUnique({
       where: { id: employeeId },
@@ -98,37 +101,17 @@ export async function recordActivity(
     if (existing?.status === "COMPLETED")
       return { alreadyCompleted: true, changes: [] };
     const changes: { skillId: string; from: number; to: number }[] = [];
-    if (status === "COMPLETED") {
-      const projected = applySkillGains(
-        { ...raw, history: [] } as Employee,
-        event as Activity,
-      );
-      for (const skill of projected.skills) {
-        const old =
-          raw.skills.find((s) => s.skillId === skill.skillId)?.level ?? 0;
-        if (skill.level !== old) {
-          await tx.employeeSkill.upsert({
-            where: {
-              employeeId_skillId: { employeeId, skillId: skill.skillId },
-            },
-            create: { employeeId, ...skill },
-            update: { level: skill.level },
-          });
-          changes.push({ skillId: skill.skillId, from: old, to: skill.level });
-        }
-      }
-    }
     await tx.activityHistory.upsert({
       where: { employeeId_eventId: { employeeId, eventId } },
       create: {
         employeeId,
         eventId,
         status,
-        completedAt: status === "COMPLETED" ? new Date() : null,
+        completedAt: null,
       },
       update: {
         status,
-        completedAt: status === "COMPLETED" ? new Date() : null,
+        completedAt: null,
       },
     });
     await tx.recommendation.deleteMany({ where: { employeeId } });

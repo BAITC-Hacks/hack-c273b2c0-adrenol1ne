@@ -61,25 +61,22 @@ afterAll(async () => {
   }
 });
 describe("Persistent career state", () => {
-  it("applies completion atomically and is idempotent", async () => {
-    const first = await services.recordActivity("EMP001", "EV017", "COMPLETED");
-    expect(first.changes).toEqual([
-      { skillId: "SK_SYSTEM_DESIGN", from: 2, to: 3 },
-    ]);
-    const again = await services.recordActivity("EMP001", "EV017", "COMPLETED");
-    expect(again.alreadyCompleted).toBe(true);
+  it("rejects legacy one-click completion without changing skill or readiness", async () => {
+    await expect(
+      services.recordActivity("EMP001", "EV017", "COMPLETED"),
+    ).rejects.toThrow("Activity Workspace");
     const state = await services.snapshot("EMP001");
     expect(
       state.employee.skills.find((s) => s.skillId === "SK_SYSTEM_DESIGN")
         ?.level,
-    ).toBe(3);
-    expect(state.recommendations[0].before).toBe(76);
-    expect(state.recommendations[0].activity.id).not.toBe("EV017");
+    ).toBe(2);
+    expect(state.recommendations[0].before).toBe(68);
+    expect(state.recommendations[0].activity.id).toBe("EV017");
     expect(
       await db.activityHistory.count({
         where: { employeeId: "EMP001", eventId: "EV017" },
       }),
-    ).toBe(1);
+    ).toBe(0);
   });
   it("imports an unseen employee and computes recommendations", async () => {
     const { history, ...profile } = createSeedEmployees()[0];

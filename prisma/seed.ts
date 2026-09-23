@@ -12,6 +12,8 @@ async function main() {
     console.log(
       "Database already contains employees; seed preserved existing data.",
     );
+    const { ensureLearningPaths } = await import("../lib/learning-service");
+    await ensureLearningPaths();
     return;
   }
   await db.$transaction(
@@ -42,6 +44,8 @@ async function main() {
     },
     { timeout: 60000 },
   );
+  const { ensureLearningPaths } = await import("../lib/learning-service");
+  await ensureLearningPaths();
   console.log(
     "Seeded 48 synthetic employees, 24 skills, 20 activities, 2 missions and six months of history.",
   );
